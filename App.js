@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { SafeAreaView, StatusBar, Text } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { SafeAreaView, StatusBar, Text, View, Button } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConductorLogin from './src/screens/ConductorLogin';
 import ConductorHome from './src/screens/ConductorHome';
+import IniciarJornada from './src/screens/IniciarJornada';
 
 export default function App() {
   const [session, setSession] = useState(null);
+  const [jornadaIniciada, setJornadaIniciada] = useState(false);
   const [loading, setLoading] = useState(true);
+  const iniciarJornadaRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -24,7 +27,14 @@ export default function App() {
     })();
   }, []);
 
-  //console.log("Render App, session:", session);
+  const handleLogout = async () => {
+    if (iniciarJornadaRef.current) {
+      iniciarJornadaRef.current.stopLocationTracking();
+    }
+    await AsyncStorage.multiRemove(['@token', '@conductor']);
+    setSession(null);
+    setJornadaIniciada(false);
+  };
 
   if (loading) {
     return (
@@ -34,15 +44,21 @@ export default function App() {
       </SafeAreaView>
     );
   }
-  //console.log("Session state:", session);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <StatusBar barStyle="dark-content" />
+      {session && (
+        <View style={{ position: 'absolute', top: 50, right: 10, zIndex: 1 }}>
+          <Button title="Cerrar Sesión" onPress={handleLogout} color="#b00020" />
+        </View>
+      )}
       {!session ? (
         <ConductorLogin onAuth={setSession} />
+      ) : !jornadaIniciada ? (
+        <IniciarJornada ref={iniciarJornadaRef} session={session} onJornadaIniciada={() => setJornadaIniciada(true)} />
       ) : (
-        <ConductorHome session={session} onLogout={() => setSession(null)} />
+        <ConductorHome session={session} onLogout={handleLogout} />
       )}
     </SafeAreaView>
   );

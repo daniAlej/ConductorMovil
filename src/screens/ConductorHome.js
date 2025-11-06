@@ -209,9 +209,7 @@ export default function ConductorHome({ session, onLogout }) {
 
       </View>
 
-      <View style={{ marginTop: 'auto' }}>
-        <Button color="#b00020" title="Salir" onPress={logout} />
-      </View>
+      
     </View>
   );
 }

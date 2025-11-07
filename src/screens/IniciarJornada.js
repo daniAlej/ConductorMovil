@@ -1,7 +1,7 @@
 import React, { useState, useRef, useImperativeHandle, forwardRef } from 'react';
 import { View, Text, Button, StyleSheet, Alert } from 'react-native';
 import { requestForegroundPermissionsAsync, watchPositionAsync, Accuracy } from 'expo-location';
-import { iniciarJornada, actualizarUbicacion } from '../services/api';
+import { iniciarJornada, updateConductorLocation } from '../services/api';
 
 const IniciarJornada = forwardRef(({ session, onJornadaIniciada }, ref) => {
   const [loading, setLoading] = useState(false);
@@ -38,7 +38,7 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada }, ref) => {
         },
         (location) => {
           console.log('Nueva ubicación:', location.coords);
-          actualizarUbicacion(session.token, location.coords.latitude, location.coords.longitude)
+          updateConductorLocation( location.coords.latitude, location.coords.longitude, session.token)
             .catch(error => console.error('Error al enviar ubicación:', error));
         }
       );

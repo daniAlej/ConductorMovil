@@ -8,8 +8,33 @@ export const iniciarJornada = (token) => {
   });
 };
 
-export const actualizarUbicacion = (token, latitude, longitude) => {
-  return API.post('/actualizar-ubicacion', { latitude, longitude }, {
+export const updateConductorLocation = (latitud, longitud, token) => {
+  return API.post('/conductores/location', { latitud, longitud }, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+
+export const updateUsuarioLocation = (id_usuario, latitud, longitud, token) => {
+  return API.post(`/usuarios/${id_usuario}/location`, { latitud, longitud }, {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const getActiveConductorLocations = (token) => {
+  return API.get('/conductores/locations/active', {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+};
+
+export const getActiveUserLocations = (token) => {
+  return API.get('/usuarios/locations/active', {
     headers: {
       Authorization: `Bearer ${token}`
     }

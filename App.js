@@ -3,11 +3,15 @@ import { SafeAreaView, StatusBar, Text, View, Button } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ConductorLogin from './src/screens/ConductorLogin';
 import ConductorHome from './src/screens/ConductorHome';
+import UsuarioHome from './src/screens/UsuarioHome';
 import IniciarJornada from './src/screens/IniciarJornada';
+import CrearReporte from './src/screens/CrearReporte';
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [jornadaIniciada, setJornadaIniciada] = useState(false);
+  const [creandoReporte, setCreandoReporte] = useState(false);
+  const [rutaIdParaReporte, setRutaIdParaReporte] = useState(null);
   const [loading, setLoading] = useState(true);
   const iniciarJornadaRef = useRef(null);
 
@@ -16,8 +20,13 @@ export default function App() {
       try {
         const token = await AsyncStorage.getItem('@token');
         const conductor = await AsyncStorage.getItem('@conductor');
+        const usuario = await AsyncStorage.getItem('@usuario');
+
         if (token && conductor) {
           setSession({ token, conductor: JSON.parse(conductor) });
+        }
+        if(token && usuario){
+          setSession({ token, usuario: JSON.parse(usuario) });
         }
       } catch (e) {
         console.log('Error al cargar sesión:', e);
@@ -32,8 +41,15 @@ export default function App() {
       iniciarJornadaRef.current.stopLocationTracking();
     }
     await AsyncStorage.multiRemove(['@token', '@conductor']);
+    await AsyncStorage.multiRemove(['@token', '@usuario']);
     setSession(null);
     setJornadaIniciada(false);
+    setCreandoReporte(false);
+  };
+
+  const handleCrearReporte = (rutaId) => {
+    setRutaIdParaReporte(rutaId);
+    setCreandoReporte(true);
   };
 
   if (loading) {
@@ -45,6 +61,19 @@ export default function App() {
     );
   }
 
+  const renderContent = () => {
+    if (!session) {
+      return <ConductorLogin onAuth={setSession} />;
+    }
+    if (!jornadaIniciada) {
+      return <IniciarJornada ref={iniciarJornadaRef} session={session} onJornadaIniciada={() => setJornadaIniciada(true)} />;
+    }
+    if (creandoReporte) {
+      return <CrearReporte session={session} rutaId={rutaIdParaReporte} onClose={() => setCreandoReporte(false)} />;
+    }
+    return <ConductorHome session={session} onLogout={handleLogout} onCrearReporte={handleCrearReporte} />;
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <StatusBar barStyle="dark-content" />
@@ -53,13 +82,7 @@ export default function App() {
           <Button title="Cerrar Sesión" onPress={handleLogout} color="#b00020" />
         </View>
       )}
-      {!session ? (
-        <ConductorLogin onAuth={setSession} />
-      ) : !jornadaIniciada ? (
-        <IniciarJornada ref={iniciarJornadaRef} session={session} onJornadaIniciada={() => setJornadaIniciada(true)} />
-      ) : (
-        <ConductorHome session={session} onLogout={handleLogout} />
-      )}
+      {renderContent()}
     </SafeAreaView>
   );
 }

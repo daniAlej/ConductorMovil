@@ -3,7 +3,7 @@ import { View, Text, TextInput, Button, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/client';
 
-export default function ConductorLogin({ onAuth }) {
+export default function UsuarioLogin({ onAuth }) {
     const [correo, setCorreo] = useState('');
     const [contrasena, setContrasena] = useState('');
     const [loading, setLoading] = useState(false);
@@ -11,15 +11,12 @@ export default function ConductorLogin({ onAuth }) {
     async function handleLogin() {
         try {
             setLoading(true);
-            const { data } = await api.post('/auth/conductor/login', { correo, contrasena });
+            const { data } = await api.post('/auth/usuario/login', { correo, contrasena });
             
-            //console.log("Login response:", data);   // 👈 revisa token y conductor
-            // Guarda sesión
             await AsyncStorage.setItem('@token', data.token);
-            await AsyncStorage.setItem('@conductor', JSON.stringify(data.conductor));
+            await AsyncStorage.setItem('@usuario', JSON.stringify(data.usuario));
 
-            onAuth({ token: data.token, conductor: data.conductor });
-            //console.log("Login data:", data);
+            onAuth({ token: data.token, usuario: data.usuario });
         } catch (e) {
             const msg = e.response?.data?.error || e.message;
             console.error("Login error:", e.response?.data || e.message);
@@ -31,7 +28,7 @@ export default function ConductorLogin({ onAuth }) {
 
     return (
         <View style={{ flex: 1, padding: 20, gap: 12, justifyContent: 'center' }}>
-            <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 8 }}>Login</Text>
+            <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 8 }}>Login Usuario</Text>
             <TextInput
                 placeholder="Correo"
                 autoCapitalize="none"

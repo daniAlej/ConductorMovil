@@ -10,7 +10,7 @@ import api, {
   getUsoIntencion
 } from '../api/client';
 
-export default function ConductorHome({ session, onLogout }) {
+export default function ConductorHome({ session, onLogout, onCrearReporte }) {
   const [me, setMe] = useState(null);
   const [rutas, setRutas] = useState([]);
   const [paradasRuta, setParadasRuta] = useState([]);
@@ -181,6 +181,10 @@ export default function ConductorHome({ session, onLogout }) {
       <Text>Bienvenido, {session?.conductor?.nombre || me?.nombre}</Text>
       <Text>Rol: {rolNombre || '(resolviendo...)'}</Text>
       <Text>Ruta: {session?.conductor?.nombre_ruta || me?.nombre_ruta || '(sin ruta)'}</Text>
+
+      <View style={{ marginVertical: 10 }}>
+        <Button title="Crear Reporte" onPress={() => onCrearReporte(rutaId)} />
+      </View>
 
       <View style={{ marginTop: 16 }}>
         <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 6 }}>

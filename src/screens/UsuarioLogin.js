@@ -7,12 +7,15 @@ export default function UsuarioLogin({ onAuth }) {
     const [correo, setCorreo] = useState('');
     const [contrasena, setContrasena] = useState('');
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     async function handleLogin() {
         try {
             setLoading(true);
+            setError(''); // Clear previous errors
             const { data } = await api.post('/auth/usuario/login', { correo, contrasena });
             
+            // Guarda sesión
             await AsyncStorage.setItem('@token', data.token);
             await AsyncStorage.setItem('@usuario', JSON.stringify(data.usuario));
 
@@ -20,7 +23,7 @@ export default function UsuarioLogin({ onAuth }) {
         } catch (e) {
             const msg = e.response?.data?.error || e.message;
             console.error("Login error:", e.response?.data || e.message);
-            Alert.alert('Error de inicio de sesión', msg);
+            setError(msg); // Set error message to be displayed on screen
         } finally {
             setLoading(false);
         }
@@ -34,14 +37,14 @@ export default function UsuarioLogin({ onAuth }) {
                 autoCapitalize="none"
                 keyboardType="email-address"
                 value={correo}
-                onChangeText={setCorreo}
+                onChangeText={(text) => { setCorreo(text); setError(''); }} // Clear error on change
                 style={{ borderWidth: 1, borderRadius: 8, padding: 10 }}
             />
             <TextInput
                 placeholder="Contraseña"
                 secureTextEntry
                 value={contrasena}
-                onChangeText={setContrasena}
+                onChangeText={(text) => { setContrasena(text); setError(''); }} // Clear error on change
                 style={{ borderWidth: 1, borderRadius: 8, padding: 10 }}
             />
             <Button
@@ -49,6 +52,7 @@ export default function UsuarioLogin({ onAuth }) {
                 onPress={handleLogin}
                 disabled={loading}
             />
+            {error ? <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text> : null}
         </View>
     );
 }

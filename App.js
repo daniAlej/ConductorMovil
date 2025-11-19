@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { SafeAreaView, StatusBar, Text, View, Button } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import RoleSelectionScreen from './src/screens/RoleSelectionScreen';
 import ConductorLogin from './src/screens/ConductorLogin';
+import UsuarioLogin from './src/screens/UsuarioLogin';
 import ConductorHome from './src/screens/ConductorHome';
 import UsuarioHome from './src/screens/UsuarioHome';
 import IniciarJornada from './src/screens/IniciarJornada';
@@ -9,6 +12,7 @@ import CrearReporte from './src/screens/CrearReporte';
 
 export default function App() {
   const [session, setSession] = useState(null);
+  const [role, setRole] = useState(null); // 'conductor' or 'usuario'
   const [jornadaIniciada, setJornadaIniciada] = useState(false);
   const [creandoReporte, setCreandoReporte] = useState(false);
   const [rutaIdParaReporte, setRutaIdParaReporte] = useState(null);
@@ -22,11 +26,14 @@ export default function App() {
         const conductor = await AsyncStorage.getItem('@conductor');
         const usuario = await AsyncStorage.getItem('@usuario');
 
-        if (token && conductor) {
-          setSession({ token, conductor: JSON.parse(conductor) });
-        }
-        if(token && usuario){
-          setSession({ token, usuario: JSON.parse(usuario) });
+        if (token) {
+          if (conductor) {
+            setSession({ token, conductor: JSON.parse(conductor) });
+            setRole('conductor');
+          } else if (usuario) {
+            setSession({ token, usuario: JSON.parse(usuario) });
+            setRole('usuario');
+          }
         }
       } catch (e) {
         console.log('Error al cargar sesión:', e);
@@ -36,13 +43,22 @@ export default function App() {
     })();
   }, []);
 
+  const handleAuth = (newSession) => {
+    if (newSession.conductor) {
+      setRole('conductor');
+    } else if (newSession.usuario) {
+      setRole('usuario');
+    }
+    setSession(newSession);
+  };
+
   const handleLogout = async () => {
     if (iniciarJornadaRef.current) {
       iniciarJornadaRef.current.stopLocationTracking();
     }
-    await AsyncStorage.multiRemove(['@token', '@conductor']);
-    await AsyncStorage.multiRemove(['@token', '@usuario']);
+    await AsyncStorage.multiRemove(['@token', '@conductor', '@usuario']);
     setSession(null);
+    setRole(null);
     setJornadaIniciada(false);
     setCreandoReporte(false);
   };
@@ -62,17 +78,36 @@ export default function App() {
   }
 
   const renderContent = () => {
-    if (!session) {
-      return <ConductorLogin onAuth={setSession} />;
+    if (session) {
+      if (role === 'conductor') {
+        if (!jornadaIniciada) {
+          return <IniciarJornada ref={iniciarJornadaRef} session={session} onJornadaIniciada={() => setJornadaIniciada(true)} />;
+        }
+        if (creandoReporte) {
+          return <CrearReporte session={session} rutaId={rutaIdParaReporte} onClose={() => setCreandoReporte(false)} />;
+        }
+        return <ConductorHome session={session} onLogout={handleLogout} onCrearReporte={handleCrearReporte} />;
+      }
+      if (role === 'usuario') {
+        return <UsuarioHome session={session} onLogout={handleLogout} />;
+      }
     }
-    if (!jornadaIniciada) {
-      return <IniciarJornada ref={iniciarJornadaRef} session={session} onJornadaIniciada={() => setJornadaIniciada(true)} />;
+
+    if (!role) {
+      return <RoleSelectionScreen onSelectRole={setRole} />;
     }
-    if (creandoReporte) {
-      return <CrearReporte session={session} rutaId={rutaIdParaReporte} onClose={() => setCreandoReporte(false)} />;
+
+    if (role === 'conductor') {
+      return <ConductorLogin onAuth={handleAuth} />;
     }
-    return <ConductorHome session={session} onLogout={handleLogout} onCrearReporte={handleCrearReporte} />;
-  }
+
+    if (role === 'usuario') {
+      return <UsuarioLogin onAuth={handleAuth} />;
+    }
+
+    // Fallback por si el estado es inconsistente
+    return <RoleSelectionScreen onSelectRole={setRole} />;
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>

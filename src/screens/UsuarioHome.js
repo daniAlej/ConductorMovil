@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Button, StyleSheet, Alert, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api, {
-  getJornadas,
-  createUso,
-  getRuta,
-  getActiveConductorLocations,
-} from '../api/client';
+import api, { getJornadas, createUso, getRuta, getActiveConductorLocations } from '../api/client';
+
+// IMPORTANTE: Importamos el componente (el sistema elegirá .native o .web solo)
+import LocationMap from '../components/LocationMap';
 
 const UsuarioHome = ({ session, onLogout }) => {
   const [usuario, setUsuario] = useState(null);
@@ -46,10 +44,11 @@ const UsuarioHome = ({ session, onLogout }) => {
         const { data: jornadas } = await getJornadas();
         const jornadaDeRuta = jornadas.find(j => j.Unidad?.id_ruta === user.id_ruta && !j.hora_fin);
         setJornadaActiva(jornadaDeRuta || null);
+        // Si no hay jornada, reiniciamos estados
         if (!jornadaDeRuta) {
-            setUsoRegistrado(false);
-            setDriver(null);
-            setRoute(null);
+          setUsoRegistrado(false);
+          setDriver(null);
+          setRoute(null);
         }
       }
     } catch (error) {
@@ -73,38 +72,40 @@ const UsuarioHome = ({ session, onLogout }) => {
     const fetchDriverAndRoute = async () => {
       try {
         setMapLoading(true);
-        // Fetch active drivers
-        const { data: activeDrivers } = await getActiveConductorLocations();
-        const currentDriver = activeDrivers.find(d => d.Unidad?.id_ruta === usuario.id_ruta);
-        
-        if (isMounted && currentDriver) {
-          setDriver(currentDriver);
-        } else if (isMounted) {
-          setDriver(null); // No active driver for this route
+        // --- AGREGA ESTOS LOGS ---
+    console.log("--- INICIO DE BÚSQUEDA ---");
+    console.log("1. Mi ID de Ruta es:", usuario.id_ruta);
+
+    const response = await getActiveConductorLocations();
+    console.log("2. Respuesta del Servidor (Status):", response.status);
+    console.log("3. Datos recibidos (Conductores):", JSON.stringify(response.data, null, 2));
+
+    const activeDrivers = response.data;
+    const currentDriver = activeDrivers.find(d => d.Unidad?.id_ruta === usuario.id_ruta);
+    
+    console.log("4. Conductor encontrado para mi ruta:", currentDriver);
+    // -------------------------
+        if (isMounted) {
+          setDriver(currentDriver || null);
         }
 
-        // Fetch route details
-        const { data: routeData } = await getRuta(usuario.id_ruta);
-        if (isMounted) {
-          setRoute(routeData);
+        // 2. Obtener Ruta
+        // Solo la pedimos si no la tenemos ya guardada para ahorrar datos
+        if (!route) {
+          const { data: routeData } = await getRuta(usuario.id_ruta);
+          if (isMounted) setRoute(routeData);
         }
 
       } catch (error) {
         console.error("Error fetching driver or route:", error);
-        if (isMounted) {
-            setDriver(null);
-            setRoute(null);
-        }
       } finally {
-        if (isMounted) {
-          setMapLoading(false);
-        }
+        if (isMounted) setMapLoading(false);
       }
     };
 
     fetchDriverAndRoute();
 
-    // Set up interval to refresh driver location
+    // Intervalo de actualización (cada 10s)
     intervalId = setInterval(async () => {
       try {
         const { data: activeDrivers } = await getActiveConductorLocations();
@@ -114,17 +115,14 @@ const UsuarioHome = ({ session, onLogout }) => {
         }
       } catch (error) {
         console.error("Error refreshing driver location:", error);
-        if (isMounted) setDriver(null);
       }
-    }, 10000); // Refresh every 10 seconds
+    }, 10000);
 
     return () => {
       isMounted = false;
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+      if (intervalId) clearInterval(intervalId);
     };
-  }, [usoRegistrado, usuario]);
+  }, [usoRegistrado, usuario, route]); // Agregamos route a dependencias para no pedirlo siempre
 
 
   const onRefresh = useCallback(async () => {
@@ -154,33 +152,40 @@ const UsuarioHome = ({ session, onLogout }) => {
     }
   };
 
+  // ---- PREPARACIÓN DE COORDENADAS DEL USUARIO ----
+  const userStopCoordinates = usuario?.latitud && usuario?.longitud
+    ? {
+      latitude: parseFloat(usuario.latitud),
+      longitude: parseFloat(usuario.longitud)
+    }
+    : null;
+
+
   if (!usuario) {
     return (
-      <View style={styles.container}>
-        <Text>Cargando...</Text>
-      </View>
+      <View style={styles.container}><Text>Cargando...</Text></View>
     );
   }
 
-  // If usage is confirmed, show the map
+  // ---- VISTA DE MAPA (Si ya registró uso) ----
   if (usoRegistrado) {
     if (mapLoading) {
       return (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" />
-          <Text>Cargando mapa y ubicación del conductor...</Text>
+          <ActivityIndicator size="large" color="#007bff" />
+          <Text style={{ marginTop: 10 }}>Localizando unidad...</Text>
         </View>
       );
     }
-    if (!driver) {
-        return (
-            <View style={styles.centered}>
-                <Text>Esperando la ubicación del conductor de tu ruta...</Text>
-                <Button title="Refrescar" onPress={loadUsuarioData} />
-            </View>
-        )
-    }
-    return <LocationMap driver={driver} route={route} />;
+
+    // Pasamos el nuevo prop userStop
+    return (
+      <LocationMap
+        driver={driver}
+        route={route}
+        userStop={userStopCoordinates}
+      />
+    );
   }
 
   return (
@@ -203,15 +208,11 @@ const UsuarioHome = ({ session, onLogout }) => {
       {jornadaActiva ? (
         <View style={styles.jornadaContainer}>
           <Text style={styles.jornadaText}>¡El conductor de tu unidad ha iniciado el recorrido!</Text>
-          {usoRegistrado ? (
-            <Text style={styles.confirmacionText}>Tu solicitud de uso ha sido enviada.</Text>
-          ) : (
-            <Button
-              title={loading ? 'Registrando...' : 'Solicitar Uso'}
-              onPress={handleCrearUso}
-              disabled={loading}
-            />
-          )}
+          <Button
+            title={loading ? 'Registrando...' : 'Solicitar Uso'}
+            onPress={handleCrearUso}
+            disabled={loading}
+          />
         </View>
       ) : (
         <Text style={styles.jornadaText}>El conductor aún no ha iniciado la jornada.</Text>
@@ -265,12 +266,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 15,
     color: '#00796b',
-  },
-  confirmacionText: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#004d40',
-    fontWeight: 'bold',
   },
 });
 

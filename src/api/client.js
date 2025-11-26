@@ -37,7 +37,7 @@ export const getConductores = () => API.get('/conductores');
 export const createConductor = (data) => API.post('/conductores', data);
 export const updateConductor = (id, data) => API.put(`/conductores/${id}`, data);
 export const deleteConductor = (id) => API.delete(`/conductores/${id}`);
-export const getActiveConductorLocations = () => API.get('/conductores/active/locations');
+export const getActiveConductorLocations = () => API.get('/conductores/locations/active');
 // Unidades (usa placa, modelo, capacidad)
 export const getUnidades = () => API.get('/unidades');
 export const createUnidad = (data) => API.post('/unidades', data);

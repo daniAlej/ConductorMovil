@@ -1,7 +1,14 @@
-// Ajusta según tu entorno
-export const BASE_URL =
-  Platform.select({
-    android: 'http://192.168.5.19:8000/api',
-    ios: 'http://192.168.5.19:8000/api',
-    default: 'http://192.168.5.19:8000/api' // ejemplo para dispositivo físico
-  });
+// Configuración del Backend - Cambia esta IP según tu entorno
+const BACKEND_IP = '192.168.5.113';
+const BACKEND_PORT = '8000';
+const API_PATH = '/api';
+
+// URL completa del backend
+const BACKEND_URL = `http://${BACKEND_IP}:${BACKEND_PORT}${API_PATH}`;
+
+// Configuración por plataforma
+export const BASE_URL = Platform.select({
+  android: BACKEND_URL,
+  ios: BACKEND_URL,
+  default: BACKEND_URL
+});

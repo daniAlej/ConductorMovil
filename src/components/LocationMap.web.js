@@ -3,10 +3,10 @@ import React from 'react';
 import { View, Text, StyleSheet, Linking } from 'react-native';
 
 const LocationMap = ({ driver, userStop }) => {
-  
+
   const openGoogleMaps = () => {
-    if (driver?.latitud && driver?.longitud) {
-      const url = `https://www.google.com/maps/search/?api=1&query=${driver.latitud},${driver.longitud}`;
+    if (driver?.latitud_actual && driver?.longitud_actual) {
+      const url = `https://www.google.com/maps/search/?api=1&query=${driver.latitud_actual},${driver.longitud_actual}`;
       Linking.openURL(url);
     }
   };
@@ -17,7 +17,7 @@ const LocationMap = ({ driver, userStop }) => {
       <Text style={styles.text}>
         El seguimiento en tiempo real está optimizado para la App Móvil.
       </Text>
-      
+
       {driver && (
         <View style={styles.card}>
           <Text style={styles.driverText}>Conductor: {driver.nombre}</Text>

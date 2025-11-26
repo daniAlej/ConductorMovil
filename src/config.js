@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 // Configuración del Backend - Cambia esta IP según tu entorno
 const BACKEND_IP = '192.168.5.113';
 const BACKEND_PORT = '8000';

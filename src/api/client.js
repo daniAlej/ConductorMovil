@@ -1,12 +1,9 @@
 // src/api/client.js
 import axios from 'axios';
-import { Platform } from 'react-native';
+import { BASE_URL } from '../config';
 
 const API = axios.create({
-  baseURL:
-    Platform.OS === 'web'
-      ? 'http://localhost:8000/api' // cuando pruebas en navegador
-      : 'http://192.168.5.19:8000/api', // cuando corres en celular físico en la misma red
+  baseURL: BASE_URL,
   timeout: 15000,
 });
 // Roles
@@ -45,7 +42,7 @@ export const updateUnidad = (id, data) => API.put(`/unidades/${id}`, data);
 export const deleteUnidad = (id) => API.delete(`/unidades/${id}`);
 //reportes (usa tipo, descripcion, id_ruta)
 export const getReportes = () => API.get('/reportes');
-export const createReporte = (data) => API.post('/reportes', data); 
+export const createReporte = (data) => API.post('/reportes', data);
 export const deleteReporte = (id) => API.delete(`/reportes/${id}`);
 // Instituciones (usa nombre, direccion, telefono)
 export const getInstituciones = () => API.get('/instituciones');
@@ -67,5 +64,6 @@ export const getUsoIntencion = () => API.get('/usointencion');
 export const createUsoIntencion = (data) => API.post('/usointencion', data);
 export const deleteUsoIntencion = (id) => API.delete(`/usointencion/${id}`);
 export const createUso = (data) => API.post('/usointencion', data);
-export { API }; 
+export const getUsos = getUsoIntencion; // Alias para mejor legibilidad
+export { API };
 export default API;

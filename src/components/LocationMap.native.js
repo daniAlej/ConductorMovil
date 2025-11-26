@@ -8,8 +8,8 @@ const LocationMap = ({ driver, route, userStop }) => {
   const mapRef = useRef(null);
 
   // 1. Coordenadas del Conductor
-  const driverLocation = driver && driver.latitud && driver.longitud
-    ? { latitude: parseFloat(driver.latitud), longitude: parseFloat(driver.longitud) }
+  const driverLocation = driver && driver.latitud_actual && driver.longitud_actual
+    ? { latitude: parseFloat(driver.latitud_actual), longitude: parseFloat(driver.longitud_actual) }
     : null;
 
   // 2. Coordenadas de la Ruta (decodificada)
@@ -62,7 +62,7 @@ const LocationMap = ({ driver, route, userStop }) => {
             coordinate={userStop}
             title="Tu Parada"
             description="Espera aquí a la unidad"
-            pinColor="green" 
+            pinColor="green"
           />
         )}
 

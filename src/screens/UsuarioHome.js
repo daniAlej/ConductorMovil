@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Button, StyleSheet, Alert, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api, { getJornadas, createUso, getRuta, getActiveConductorLocations } from '../api/client';
+import api, { getJornadas, createUso, getRuta, getActiveConductorLocations, getUsos } from '../api/client';
 
 // IMPORTANTE: Importamos el componente (el sistema elegirá .native o .web solo)
 import LocationMap from '../components/LocationMap';
@@ -11,6 +11,7 @@ const UsuarioHome = ({ session, onLogout }) => {
   const [jornadaActiva, setJornadaActiva] = useState(null);
   const [loading, setLoading] = useState(false);
   const [usoRegistrado, setUsoRegistrado] = useState(false);
+  const [yaRegistroUso, setYaRegistroUso] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   // State for map
@@ -42,11 +43,55 @@ const UsuarioHome = ({ session, onLogout }) => {
 
       if (user?.id_ruta) {
         const { data: jornadas } = await getJornadas();
-        const jornadaDeRuta = jornadas.find(j => j.Unidad?.id_ruta === user.id_ruta && !j.hora_fin);
+
+        // LOG TEMPORAL para debugging
+        console.log('=== DEBUG JORNADAS ===');
+        console.log('Total jornadas:', jornadas.length);
+        console.log('ID de ruta del usuario:', user.id_ruta);
+        jornadas.forEach((j, idx) => {
+          console.log(`Jornada ${idx} - COMPLETO:`, j);
+        });
+
+        // Validar que la jornada sea de hoy
+        const hoy = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const jornadaDeRuta = jornadas.find(j => {
+          // Verificar que sea de la misma ruta
+          if (j.Unidad?.id_ruta !== user.id_ruta) return false;
+
+          // Validar que el campo fecha exista y sea válida
+          if (!j.fecha) return false;
+
+          try {
+            // Comparar fecha de inicio de jornada con hoy
+            const fechaJornada = new Date(j.fecha).toISOString().split('T')[0];
+            console.log('Comparando:', { fechaJornada, hoy, esHoy: fechaJornada === hoy });
+            return fechaJornada === hoy;
+          } catch (error) {
+            console.error('Error al parsear fecha de jornada:', error);
+            return false;
+          }
+        });
+
+        console.log('Jornada activa encontrada:', jornadaDeRuta);
         setJornadaActiva(jornadaDeRuta || null);
-        // Si no hay jornada, reiniciamos estados
-        if (!jornadaDeRuta) {
+
+        // Verificar si el usuario ya tiene un uso registrado en esta jornada
+        if (jornadaDeRuta) {
+          try {
+            const { data: usos } = await getUsos();
+            const usoExistente = usos.find(uso =>
+              uso.id_usuario === user.id_usuario &&
+              uso.id_jornada === jornadaDeRuta.id_jornada
+            );
+            setYaRegistroUso(!!usoExistente);
+            setUsoRegistrado(!!usoExistente);
+          } catch (error) {
+            console.error('Error al verificar usos:', error);
+          }
+        } else {
+          // Si no hay jornada, reiniciamos estados
           setUsoRegistrado(false);
+          setYaRegistroUso(false);
           setDriver(null);
           setRoute(null);
         }
@@ -73,18 +118,18 @@ const UsuarioHome = ({ session, onLogout }) => {
       try {
         setMapLoading(true);
         // --- AGREGA ESTOS LOGS ---
-    console.log("--- INICIO DE BÚSQUEDA ---");
-    console.log("1. Mi ID de Ruta es:", usuario.id_ruta);
+        console.log("--- INICIO DE BÚSQUEDA ---");
+        console.log("1. Mi ID de Ruta es:", usuario.id_ruta);
 
-    const response = await getActiveConductorLocations();
-    console.log("2. Respuesta del Servidor (Status):", response.status);
-    console.log("3. Datos recibidos (Conductores):", JSON.stringify(response.data, null, 2));
+        const response = await getActiveConductorLocations();
+        console.log("2. Respuesta del Servidor (Status):", response.status);
+        console.log("3. Datos recibidos (Conductores):", JSON.stringify(response.data, null, 2));
 
-    const activeDrivers = response.data;
-    const currentDriver = activeDrivers.find(d => d.Unidad?.id_ruta === usuario.id_ruta);
-    
-    console.log("4. Conductor encontrado para mi ruta:", currentDriver);
-    // -------------------------
+        const activeDrivers = response.data;
+        const currentDriver = activeDrivers.find(d => d.Unidad?.id_ruta === usuario.id_ruta);
+
+        console.log("4. Conductor encontrado para mi ruta:", currentDriver);
+        // -------------------------
         if (isMounted) {
           setDriver(currentDriver || null);
         }
@@ -209,13 +254,17 @@ const UsuarioHome = ({ session, onLogout }) => {
         <View style={styles.jornadaContainer}>
           <Text style={styles.jornadaText}>¡El conductor de tu unidad ha iniciado el recorrido!</Text>
           <Button
-            title={loading ? 'Registrando...' : 'Solicitar Uso'}
+            title={yaRegistroUso ? 'Uso ya registrado' : (loading ? 'Registrando...' : 'Solicitar Uso')}
             onPress={handleCrearUso}
-            disabled={loading}
+            disabled={loading || yaRegistroUso}
+            color={yaRegistroUso ? '#999' : '#007bff'}
           />
+          {yaRegistroUso && (
+            <Text style={styles.warningText}>Ya has solicitado el uso para esta jornada</Text>
+          )}
         </View>
       ) : (
-        <Text style={styles.jornadaText}>El conductor aún no ha iniciado la jornada.</Text>
+        <Text style={styles.jornadaText}>El conductor aún no ha iniciado la jornada de hoy.</Text>
       )}
     </ScrollView>
   );
@@ -266,6 +315,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 15,
     color: '#00796b',
+  },
+  warningText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 10,
+    color: '#f57c00',
+    fontStyle: 'italic',
   },
 });
 

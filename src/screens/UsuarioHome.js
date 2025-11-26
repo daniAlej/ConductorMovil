@@ -138,6 +138,8 @@ const UsuarioHome = ({ session, onLogout }) => {
         // Solo la pedimos si no la tenemos ya guardada para ahorrar datos
         if (!route) {
           const { data: routeData } = await getRuta(usuario.id_ruta);
+          console.log('=== ESTRUCTURA DE ROUTE ===');
+          console.log('Route completo:', JSON.stringify(routeData, null, 2));
           if (isMounted) setRoute(routeData);
         }
 

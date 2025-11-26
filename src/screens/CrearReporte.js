@@ -2,30 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, Platform, Image } from 'react-native';
 import { Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { Picker } from '@react-native-picker/picker';
-import api from '../api/client'; 
+import api from '../api/client';
 
 const CrearReporte = ({ session, onClose, rutaId }) => {
   const [tipo, setTipo] = useState('atraso');
   const [descripcion, setDescripcion] = useState('');
   const [foto, setFoto] = useState(null);
+  const [ubicacion, setUbicacion] = useState(null);
   const [hasPermission, setHasPermission] = useState(null);
 
   useEffect(() => {
     (async () => {
       const cameraStatus = await Camera.requestCameraPermissionsAsync();
+      const locationStatus = await Location.requestForegroundPermissionsAsync();
+
       setHasPermission(cameraStatus.status === 'granted');
+
       if (Platform.OS !== 'web') {
         const libraryStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (cameraStatus.status !== 'granted' || libraryStatus.status !== 'granted') {
           Alert.alert('Permisos necesarios', 'Se necesitan permisos para la cámara y la galería para continuar.');
         }
       }
+
+      if (locationStatus.status !== 'granted') {
+        Alert.alert('Permiso de ubicación', 'Se recomienda activar la ubicación para registrar dónde se tomó la foto.');
+      }
     })();
   }, []);
 
   const takePicture = async () => {
     if (hasPermission) {
+      // Capturar foto
       let result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
@@ -34,9 +44,26 @@ const CrearReporte = ({ session, onClose, rutaId }) => {
 
       if (!result.canceled) {
         setFoto(result.assets[0]);
+
+        // Capturar ubicación actual
+        try {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High,
+          });
+
+          setUbicacion({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+
+          console.log('Ubicación capturada:', location.coords.latitude, location.coords.longitude);
+        } catch (error) {
+          console.error('Error al obtener ubicación:', error);
+          Alert.alert('Ubicación', 'No se pudo obtener la ubicación actual.');
+        }
       }
     } else {
-        Alert.alert('Permiso denegado', 'No se puede acceder a la cámara.');
+      Alert.alert('Permiso denegado', 'No se puede acceder a la cámara.');
     }
   };
 
@@ -55,14 +82,21 @@ const CrearReporte = ({ session, onClose, rutaId }) => {
     formData.append('id_conductor', session.conductor.id_conductor);
     formData.append('fecha', fechaActual);
 
+    // Agregar ubicación si está disponible
+    if (ubicacion) {
+      formData.append('latitud', ubicacion.latitude.toString());
+      formData.append('longitud', ubicacion.longitude.toString());
+      console.log('Enviando ubicación:', ubicacion);
+    }
+
     if (foto) {
-        const uriParts = foto.uri.split('.');
-        const fileType = uriParts[uriParts.length - 1];
-        formData.append('foto', {
-          uri: foto.uri,
-          name: `reporte_${Date.now()}.${fileType}`,
-          type: `image/${fileType}`,
-        });
+      const uriParts = foto.uri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+      formData.append('foto', {
+        uri: foto.uri,
+        name: `reporte_${Date.now()}.${fileType}`,
+        type: `image/${fileType}`,
+      });
     }
 
     try {
@@ -79,7 +113,7 @@ const CrearReporte = ({ session, onClose, rutaId }) => {
       Alert.alert('Error', 'No se pudo enviar el reporte.');
     }
   };
-  
+
   if (hasPermission === null) {
     return <View />;
   }
@@ -90,7 +124,7 @@ const CrearReporte = ({ session, onClose, rutaId }) => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Crear Reporte</Text>
-      
+
       <Picker
         selectedValue={tipo}
         onValueChange={(itemValue) => setTipo(itemValue)}
@@ -112,6 +146,12 @@ const CrearReporte = ({ session, onClose, rutaId }) => {
       <Button title="Tomar Foto" onPress={takePicture} />
 
       {foto && <Image source={{ uri: foto.uri }} style={styles.image} />}
+
+      {ubicacion && (
+        <Text style={styles.locationText}>
+          📍 Ubicación capturada: {ubicacion.latitude.toFixed(6)}, {ubicacion.longitude.toFixed(6)}
+        </Text>
+      )}
 
       <View style={styles.buttonContainer}>
         <Button title="Enviar Reporte" onPress={handleSubmit} />
@@ -159,6 +199,13 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: 20,
     borderRadius: 5,
+  },
+  locationText: {
+    marginTop: 10,
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#00796b',
+    fontWeight: '600',
   },
 });
 

@@ -94,7 +94,7 @@ export default function App() {
     }
 
     if (!role) {
-      return <RoleSelectionScreen onSelectRole={setRole} />;
+      return <RoleSelectionScreen onLogin={handleAuth} onSelectRole={setRole} />;
     }
 
     if (role === 'conductor') {
@@ -106,7 +106,7 @@ export default function App() {
     }
 
     // Fallback por si el estado es inconsistente
-    return <RoleSelectionScreen onSelectRole={setRole} />;
+    return <RoleSelectionScreen onLogin={handleAuth} onSelectRole={setRole} />;
   };
 
   return (

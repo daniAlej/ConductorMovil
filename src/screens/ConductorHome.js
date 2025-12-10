@@ -46,6 +46,17 @@ export default function ConductorHome({ session, onLogout, onCrearReporte }) {
       setUsuarios(u.data || []);
       setRolesC(rolesResp.data || []);
       setUsoIntencion(usoResp.data || []);
+
+      // LOGS DE DEBUGGING
+      console.log('📊 Catálogos cargados:', {
+        rutas: r.data?.length || 0,
+        usuarios: u.data?.length || 0,
+        usoIntencion: usoResp.data?.length || 0
+      });
+
+      if (usoResp.data?.length > 0) {
+        console.log('📋 Primer registro de usoIntencion:', JSON.stringify(usoResp.data[0], null, 2));
+      }
     } catch (e) {
       console.log('Error cargando datos:', e.message);
     }
@@ -100,26 +111,75 @@ export default function ConductorHome({ session, onLogout, onCrearReporte }) {
   // === UsoIntención filtrado por unidad del conductor ===
   const unidadConductor = session?.conductor?.id_unidad || me?.id_unidad;
   const hoy = new Date().toISOString().split('T')[0];
-  const usoFiltrado = useMemo(() => {
-    if (!unidadConductor || !usoIntencion?.length) return [];
 
-    return usoIntencion
+  const usoFiltrado = useMemo(() => {
+    console.log('🔍 Filtrando usoIntencion:', {
+      totalRegistros: usoIntencion?.length || 0,
+      unidadConductor,
+      hoy,
+      rutaId,
+    });
+
+    if (!usoIntencion?.length) {
+      console.log('⚠️ usoIntencion está vacío');
+      return [];
+    }
+
+    // Mostrar todos los registros de usoIntencion para debugging
+    console.log('📊 Todos los registros de usoIntencion:');
+    usoIntencion.forEach((u, idx) => {
+      console.log(`  [${idx}]:`, {
+        id_uso: u.id_uso,
+        id_jornada: u.id_jornada,
+        id_usuario: u.id_usuario,
+        fecha_jornada: u.Jornada?.fecha,
+        id_unidad_jornada: u.Jornada?.id_unidad,
+        id_ruta_usuario: u.Usuario?.id_ruta,
+        nombre_usuario: u.Usuario?.nombre,
+      });
+    });
+
+    const filtrados = usoIntencion
       .filter(u => {
-        const fechaUso = new Date(u.Jornada?.fecha).toISOString().split('T')[0];
-        return (
-          u.Jornada?.id_unidad === unidadConductor &&
-          fechaUso === hoy
-        );
+        // Si no hay jornada, saltar este registro
+        if (!u.Jornada) {
+          console.log(`❌ Registro ${u.id_uso}: No tiene Jornada asociada`);
+          return false;
+        }
+
+        const fechaUso = new Date(u.Jornada.fecha).toISOString().split('T')[0];
+
+        // Comprobar por unidad O por ruta
+        const cumpleUnidad = unidadConductor && u.Jornada.id_unidad === unidadConductor;
+        const cumpleRuta = rutaId && u.Usuario?.id_ruta === rutaId;
+        const cumpleFecha = fechaUso === hoy;
+
+        const cumple = (cumpleUnidad || cumpleRuta) && cumpleFecha;
+
+        console.log(`${cumple ? '✅' : '❌'} Registro ${u.id_uso}:`, {
+          cumpleUnidad: `${cumpleUnidad} (${u.Jornada.id_unidad} === ${unidadConductor})`,
+          cumpleRuta: `${cumpleRuta} (${u.Usuario?.id_ruta} === ${rutaId})`,
+          cumpleFecha: `${cumpleFecha} (${fechaUso} === ${hoy})`,
+        });
+
+        return cumple;
       })
       .map(u => ({
         id_uso: u.id_uso,
         nombre_usuario: u.Usuario?.nombre || '(sin nombre)',
         parada: u.Usuario?.Parada?.nombre_parada || '(sin parada)',
-        ruta: u.Usuario?.Rutum?.nombre_ruta || '(sin ruta)',
+        ruta: u.Usuario?.Ruta?.nombre_ruta || u.Usuario?.Rutum?.nombre_ruta || '(sin ruta)',
         fecha: new Date(u.Jornada?.fecha).toLocaleDateString(),
         placa: u.Jornada?.Unidad?.placa || '(sin placa)'
       }));
-  }, [usoIntencion, unidadConductor]);
+
+    console.log('✅ Registros filtrados:', filtrados.length);
+    if (filtrados.length > 0) {
+      console.log('📋 Primeros 3 pasajeros:', filtrados.slice(0, 3));
+    }
+
+    return filtrados;
+  }, [usoIntencion, unidadConductor, hoy, rutaId]);
 
   async function logout() {
     await AsyncStorage.multiRemove(['@token', '@conductor']);
@@ -133,7 +193,7 @@ export default function ConductorHome({ session, onLogout, onCrearReporte }) {
       await fetchMe();
       await loadCatalogos();
 
-      // 🔁 refrescar cada 15 segundos (ajusta el tiempo)
+      // 🔁 refrescar cada 5 segundos
       interval = setInterval(async () => {
         try {
           const { data } = await getUsoIntencion();
@@ -151,8 +211,6 @@ export default function ConductorHome({ session, onLogout, onCrearReporte }) {
     return () => {
       if (interval) clearInterval(interval);
     };
-    fetchMe();
-    loadCatalogos();
   }, []);
 
   // === Render ===
@@ -181,9 +239,24 @@ export default function ConductorHome({ session, onLogout, onCrearReporte }) {
       <Text>Bienvenido, {session?.conductor?.nombre || me?.nombre}</Text>
       <Text>Rol: {rolNombre || '(resolviendo...)'}</Text>
       <Text>Ruta: {session?.conductor?.nombre_ruta || me?.nombre_ruta || '(sin ruta)'}</Text>
+      <Text>Unidad: {unidadConductor || '(sin unidad)'}</Text>
 
-      <View style={{ marginVertical: 10 }}>
-        <Button title="Crear Reporte" onPress={() => onCrearReporte(rutaId)} />
+      {/* Debug info */}
+      <View style={{ backgroundColor: '#f0f0f0', padding: 10, borderRadius: 5 }}>
+        <Text style={{ fontSize: 12, fontWeight: 'bold' }}>📊 Debug Info:</Text>
+        <Text style={{ fontSize: 10 }}>Total usoIntencion: {usoIntencion?.length || 0}</Text>
+        <Text style={{ fontSize: 10 }}>Pasajeros filtrados: {usoFiltrado?.length || 0}</Text>
+        <Text style={{ fontSize: 10 }}>Ruta ID: {rutaId || 'N/A'}</Text>
+        <Text style={{ fontSize: 10 }}>Unidad ID: {unidadConductor || 'N/A'}</Text>
+      </View>
+
+      <View style={{ marginVertical: 10, flexDirection: 'row', gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Button title="Crear Reporte" onPress={() => onCrearReporte(rutaId)} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button title="Cerrar Sesión" onPress={logout} color="#dc3545" />
+        </View>
       </View>
 
       <View style={{ marginTop: 16 }}>
@@ -210,10 +283,7 @@ export default function ConductorHome({ session, onLogout, onCrearReporte }) {
             </Text>
           }
         />
-
       </View>
-
-      
     </View>
   );
 }

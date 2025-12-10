@@ -81,7 +81,7 @@ const LocationMap = ({ driver, route, userStop }) => {
       <MapContainer
         center={getInitialCenter()}
         zoom={13}
-        style={{ height: '100%', width: '100%' }}
+        style={{ height: '100dvh', width: '100%' }}
         scrollWheelZoom={true}
       >
         {/* Tiles de CartoDB */}

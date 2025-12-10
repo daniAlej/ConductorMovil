@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e0f7fa',
     borderRadius: 10,
     alignItems: 'center',
-    width: '100%',
+    width: '100dvh',
   },
   jornadaText: {
     fontSize: 16,

@@ -1,11 +1,33 @@
 // src/api/client.js
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from '../config';
 
 const API = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
 });
+
+// Interceptor para agregar el token automáticamente a todas las peticiones
+API.interceptors.request.use(
+  async (config) => {
+    try {
+      const token = await AsyncStorage.getItem('@token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        console.log('🔑 Token agregado a la petición:', config.url);
+      } else {
+        console.log('⚠️ No hay token disponible para:', config.url);
+      }
+    } catch (error) {
+      console.error('❌ Error al obtener token:', error);
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 // Roles
 export const getRoles = () => API.get('/roles');
 //roles conductor
@@ -58,6 +80,14 @@ export const deleteContrato = (id) => API.delete(`/contratos/${id}`);
 export const getJornadas = () => API.get('/jornadas');
 export const createJornada = (data) => API.post('/jornadas', data);
 export const deleteJornada = (id) => API.delete(`/jornadas/${id}`);
+
+// Nuevos endpoints de jornadas con seguimiento de paradas
+export const iniciarJornada = (data) => API.post('/jornadas/iniciar', data);
+export const confirmarParada = (data) => API.post('/jornadas/confirmar-parada', data);
+export const finalizarJornada = (data) => API.post('/jornadas/finalizar', data);
+export const getJornadaActiva = (idConductor) => API.get(`/jornadas/activa/${idConductor}`);
+export const getParadasPendientes = (idJornada) => API.get(`/jornadas/${idJornada}/paradas-pendientes`);
+export const verificarProximidad = (data) => API.post('/jornadas/verificar-proximidad', data);
 
 // usoIntencion (usa id_usuario, id_ruta, fecha, hora)
 export const getUsoIntencion = () => API.get('/usointencion');

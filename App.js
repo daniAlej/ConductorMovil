@@ -64,8 +64,12 @@ export default function App() {
   };
 
   const handleCrearReporte = (rutaId) => {
+    console.log('📝 handleCrearReporte llamado');
+    console.log('   rutaId:', rutaId);
+    console.log('   Estado antes:', { creandoReporte, jornadaIniciada });
     setRutaIdParaReporte(rutaId);
     setCreandoReporte(true);
+    console.log('   Cambiando creandoReporte a true');
   };
 
   if (loading) {
@@ -78,15 +82,23 @@ export default function App() {
   }
 
   const renderContent = () => {
+    console.log('🎨 renderContent - Estado:', {
+      hasSession: !!session,
+      role,
+      creandoReporte,
+      jornadaIniciada
+    });
+
     if (session) {
       if (role === 'conductor') {
-        if (!jornadaIniciada) {
-          return <IniciarJornada ref={iniciarJornadaRef} session={session} onJornadaIniciada={() => setJornadaIniciada(true)} />;
-        }
+        // Si está creando un reporte, mostrar el formulario
         if (creandoReporte) {
+          console.log('   → Renderizando: CrearReporte');
           return <CrearReporte session={session} rutaId={rutaIdParaReporte} onClose={() => setCreandoReporte(false)} />;
         }
-        return <ConductorHome session={session} onLogout={handleLogout} onCrearReporte={handleCrearReporte} />;
+        // Siempre mostrar IniciarJornada (maneja su propio estado de jornada iniciada/no iniciada)
+        console.log('   → Renderizando: IniciarJornada');
+        return <IniciarJornada ref={iniciarJornadaRef} session={session} onJornadaIniciada={() => setJornadaIniciada(true)} onCrearReporte={handleCrearReporte} />;
       }
       if (role === 'usuario') {
         return <UsuarioHome session={session} onLogout={handleLogout} />;

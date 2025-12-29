@@ -1,11 +1,11 @@
 // src/screens/IniciarJornada.js
 import React, { useState, useRef, useImperativeHandle, forwardRef, useEffect } from 'react';
 import { View, Text, Button, StyleSheet, Alert, FlatList, ActivityIndicator } from 'react-native';
-import * as Location from 'expo-location';
 import { iniciarJornada, getUsoIntencion, getJornadaActiva } from '../api/client';
 import API from '../api/client';
+import { startLocationTracking, requestPermissions } from '../utils/locationHelper';
 
-const IniciarJornada = forwardRef(({ session, onJornadaIniciada }, ref) => {
+const IniciarJornada = forwardRef(({ session, onJornadaIniciada, onCrearReporte }, ref) => {
   const [loading, setLoading] = useState(false);
   const [verificandoJornada, setVerificandoJornada] = useState(true); // Para mostrar loading inicial
   const [jornadaIniciada, setJornadaIniciada] = useState(false);
@@ -233,7 +233,7 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada }, ref) => {
 
       // Solicitar permisos (no solo verificar)
       console.log('📍 Solicitando permisos de ubicación...');
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await requestPermissions();
 
       if (status !== 'granted') {
         console.log('❌ Permisos de ubicación denegados');
@@ -247,12 +247,7 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada }, ref) => {
       console.log('✅ Permisos de ubicación otorgados');
       console.log('🚀 Iniciando tracking de ubicación...');
       console.log('⚙️ Configuración GPS: timeInterval=3000ms (3s), distanceInterval=0m, accuracy=Balanced');
-      locationSubscription.current = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.Balanced, // CAMBIADO: Balanced en lugar de High para evitar throttling
-          timeInterval: 3000, // CAMBIADO: 3 segundos en lugar de 5 para compensar posible throttling
-          distanceInterval: 0, // 0 metros = actualizar por tiempo, no por distancia
-        },
+      locationSubscription.current = await startLocationTracking(
         async (location) => {
           const { latitude, longitude } = location.coords;
 
@@ -326,7 +321,7 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada }, ref) => {
     try {
       // 1. Pedir permisos de ubicación PRIMERO
       console.log('📍 Paso 1: Solicitando permisos de ubicación...');
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await requestPermissions();
 
       if (status !== 'granted') {
         console.error('❌ Permisos de ubicación denegados');
@@ -365,12 +360,7 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada }, ref) => {
       }
 
       console.log('⚙️ Configuración GPS: timeInterval=3000ms (3s), distanceInterval=0m, accuracy=Balanced');
-      locationSubscription.current = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.Balanced, // CAMBIADO: Balanced en lugar de High para evitar throttling
-          timeInterval: 3000, // CAMBIADO: 3 segundos en lugar de 5 para compensar posible throttling
-          distanceInterval: 0, // 0 metros = actualizar por tiempo, no por distancia
-        },
+      locationSubscription.current = await startLocationTracking(
         async (location) => {
           const { latitude, longitude } = location.coords;
           console.log('📍 Ubicación actualizada:', { latitude, longitude });
@@ -498,6 +488,19 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada }, ref) => {
               📡 GPS: {ultimaUbicacion.latitud.toFixed(6)}, {ultimaUbicacion.longitud.toFixed(6)} ({ultimaUbicacion.timestamp})
             </Text>
           )}
+        </View>
+
+        {/* Botón Crear Reporte */}
+        <View style={styles.reportButtonContainer}>
+          <Button
+            title="📝 Crear Reporte"
+            onPress={() => {
+              console.log('🔘 Botón Crear Reporte presionado');
+              console.log('📋 Ruta ID:', session.conductor.id_ruta);
+              onCrearReporte(session.conductor.id_ruta);
+            }}
+            color="#0066FF"
+          />
         </View>
 
         <View style={styles.tableContainer}>
@@ -629,9 +632,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 20,
   },
+  reportButtonContainer: {
+    marginBottom: 20,
+  },
   statusText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
     textAlign: 'center',
   },

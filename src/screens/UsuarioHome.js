@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Button, StyleSheet, Alert, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { getJornadas, createUso, getRuta, getActiveConductorLocations, getUsos } from '../api/client';
+import { useProximityTracking } from '../hooks/useProximityTracking';
 
 // IMPORTANTE: Importamos el componente (el sistema elegirá .native o .web solo)
 import LocationMap from '../components/LocationMap';
@@ -12,6 +13,7 @@ const UsuarioHome = ({ session, onLogout }) => {
   const [loading, setLoading] = useState(false);
   const [usoRegistrado, setUsoRegistrado] = useState(false);
   const [yaRegistroUso, setYaRegistroUso] = useState(false);
+  const [usoConfirmado, setUsoConfirmado] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   // State for map
@@ -83,8 +85,19 @@ const UsuarioHome = ({ session, onLogout }) => {
               uso.id_usuario === user.id_usuario &&
               uso.id_jornada === jornadaDeRuta.id_jornada
             );
-            setYaRegistroUso(!!usoExistente);
-            setUsoRegistrado(!!usoExistente);
+
+            const tieneUso = !!usoExistente;
+            const estaConfirmado = usoExistente?.confirmado === 1 || usoExistente?.confirmado === true;
+
+            console.log('📊 Estado del uso:', {
+              tieneUso,
+              estaConfirmado,
+              usoExistente: usoExistente || 'No existe'
+            });
+
+            setYaRegistroUso(tieneUso);
+            setUsoRegistrado(tieneUso);
+            setUsoConfirmado(estaConfirmado);
           } catch (error) {
             console.error('Error al verificar usos:', error);
           }
@@ -92,6 +105,7 @@ const UsuarioHome = ({ session, onLogout }) => {
           // Si no hay jornada, reiniciamos estados
           setUsoRegistrado(false);
           setYaRegistroUso(false);
+          setUsoConfirmado(false);
           setDriver(null);
           setRoute(null);
         }
@@ -207,7 +221,42 @@ const UsuarioHome = ({ session, onLogout }) => {
     }
     : null;
 
+  // ---- SISTEMA DE PROXIMIDAD ----
+  // IMPORTANTE: Este hook debe estar ANTES de cualquier return condicional
+  const {
+    distancia,
+    confirmado,
+    mensaje,
+    dentroDelRango,
+    isChecking,
+    userLocation
+  } = useProximityTracking(
+    usuario?.id_usuario,
+    jornadaActiva?.id_jornada,
+    usoRegistrado && !usoConfirmado // Solo activar si ya registró uso y aún NO está confirmado
+  );
 
+  // LOG DE DEBUG PARA PROXIMIDAD
+  console.log('🔍 Estado de proximidad:', {
+    usuario: usuario?.nombre,
+    jornadaActiva: !!jornadaActiva,
+    usoRegistrado,
+    usoConfirmado,
+    enabled: usoRegistrado && !usoConfirmado,
+    distancia,
+    confirmado,
+    userLocation
+  });
+
+  // Actualizar estado cuando el hook confirme el uso
+  useEffect(() => {
+    if (confirmado && !usoConfirmado) {
+      console.log('✅ Actualizando estado: uso confirmado por proximidad');
+      setUsoConfirmado(true);
+    }
+  }, [confirmado, usoConfirmado]);
+
+  // ---- VALIDACIONES Y RETORNOS CONDICIONALES ----
   if (!usuario) {
     return (
       <View style={styles.container}><Text>Cargando...</Text></View>
@@ -225,13 +274,73 @@ const UsuarioHome = ({ session, onLogout }) => {
       );
     }
 
-    // Pasamos el nuevo prop userStop
+    // VISTA CON MAPA Y ESTADO DE PROXIMIDAD
     return (
-      <LocationMap
-        driver={driver}
-        route={route}
-        userStop={userStopCoordinates}
-      />
+      <View style={styles.fullContainer}>
+        {/* Mapa */}
+        <View style={styles.mapContainer}>
+          <LocationMap
+            driver={driver}
+            route={route}
+            userStop={userStopCoordinates}
+          />
+        </View>
+
+        {/* Panel de información de proximidad */}
+        <View style={styles.proximityPanel}>
+          {confirmado ? (
+            // Estado: Confirmado
+            <View style={styles.confirmedContainer}>
+              <Text style={styles.confirmedIcon}>✅</Text>
+              <Text style={styles.confirmedTitle}>¡Viaje Confirmado!</Text>
+              <Text style={styles.confirmedSubtitle}>
+                Tu presencia ha sido registrada automáticamente
+              </Text>
+            </View>
+          ) : (
+            // Estado: Verificando proximidad
+            <View style={styles.trackingContainer}>
+              <View style={styles.distanceRow}>
+                <Text style={styles.distanceLabel}>Distancia a la unidad:</Text>
+                <View style={styles.distanceBadge}>
+                  <Text style={styles.distanceValue}>
+                    {distancia ? `${distancia}m` : '---'}
+                  </Text>
+                </View>
+              </View>
+
+              {mensaje && (
+                <Text style={styles.statusMessage}>{mensaje}</Text>
+              )}
+
+              {dentroDelRango && (
+                <View style={styles.alertContainer}>
+                  <Text style={styles.alertIcon}>🔔</Text>
+                  <Text style={styles.alertText}>
+                    La unidad está cerca. Tu viaje se confirmará automáticamente.
+                  </Text>
+                </View>
+              )}
+
+              {isChecking && (
+                <View style={styles.checkingIndicator}>
+                  <ActivityIndicator size="small" color="#667eea" />
+                  <Text style={styles.checkingText}>Verificando...</Text>
+                </View>
+              )}
+
+              {userLocation && (
+                <View style={styles.locationInfo}>
+                  <Text style={styles.locationLabel}>📍 Tu ubicación GPS activa</Text>
+                  <Text style={styles.locationCoords}>
+                    {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      </View>
     );
   }
 
@@ -310,7 +419,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e0f7fa',
     borderRadius: 10,
     alignItems: 'center',
-    width: '100dvh',
+    width: '100%',
   },
   jornadaText: {
     fontSize: 16,
@@ -324,6 +433,120 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#f57c00',
     fontStyle: 'italic',
+  },
+  // Nuevos estilos para el sistema de proximidad
+  fullContainer: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  mapContainer: {
+    flex: 1,
+  },
+  proximityPanel: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  confirmedContainer: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#d4edda',
+    borderRadius: 15,
+  },
+  confirmedIcon: {
+    fontSize: 60,
+    marginBottom: 10,
+  },
+  confirmedTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#155724',
+    marginBottom: 5,
+  },
+  confirmedSubtitle: {
+    fontSize: 14,
+    color: '#155724',
+    textAlign: 'center',
+  },
+  trackingContainer: {
+    gap: 15,
+  },
+  distanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  distanceLabel: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  distanceBadge: {
+    backgroundColor: '#667eea',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  distanceValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  statusMessage: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    paddingVertical: 5,
+  },
+  alertContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff3cd',
+    padding: 15,
+    borderRadius: 10,
+    gap: 10,
+  },
+  alertIcon: {
+    fontSize: 24,
+  },
+  alertText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#856404',
+  },
+  checkingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 10,
+  },
+  checkingText: {
+    fontSize: 14,
+    color: '#667eea',
+  },
+  locationInfo: {
+    backgroundColor: '#f0f0f0',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 5,
+  },
+  locationLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 3,
+  },
+  locationCoords: {
+    fontSize: 11,
+    color: '#999',
+    fontFamily: 'monospace',
   },
 });
 

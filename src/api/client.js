@@ -95,5 +95,58 @@ export const createUsoIntencion = (data) => API.post('/usointencion', data);
 export const deleteUsoIntencion = (id) => API.delete(`/usointencion/${id}`);
 export const createUso = (data) => API.post('/usointencion', data);
 export const getUsos = getUsoIntencion; // Alias para mejor legibilidad
+
+// Proximidad - Sistema de notificaciones y confirmación automática
+export const verificarProximidadUsuario = async (idUsuario, ubicacion) => {
+  try {
+    const response = await API.post(
+      `/usointencion/verificar-proximidad-usuario/${idUsuario}`,
+      {
+        latitud: ubicacion.latitude,
+        longitud: ubicacion.longitude,
+        id_jornada: ubicacion.id_jornada
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error verificando proximidad usuario:', error);
+    throw error;
+  }
+};
+
+export const verificarProximidadUnidad = async (ubicacion) => {
+  try {
+    const response = await API.post(
+      '/usointencion/verificar-proximidad-unidad',
+      {
+        latitud: ubicacion.latitude,
+        longitud: ubicacion.longitude
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error verificando proximidad unidad:', error);
+    throw error;
+  }
+};
+
+export const getUsosConProximidad = async (idUsuario, ubicacion) => {
+  try {
+    const response = await API.get(
+      `/usointencion/con-proximidad/${idUsuario}`,
+      {
+        params: {
+          latitud: ubicacion.latitude,
+          longitud: ubicacion.longitude
+        }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error obteniendo usos con proximidad:', error);
+    throw error;
+  }
+};
+
 export { API };
 export default API;

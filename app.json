@@ -13,21 +13,46 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.ConductorAplicacion",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Esta app necesita acceso a tu ubicación para mostrar tu posición en el mapa y rastrear tu ruta.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Esta app necesita acceso a tu ubicación en segundo plano para rastrear tu ruta mientras conduces.",
+        "NSCameraUsageDescription": "Esta app necesita acceso a la cámara para tomar fotos de reportes.",
+        "NSPhotoLibraryUsageDescription": "Esta app necesita acceso a tu galería para seleccionar fotos.",
+        "NSPhotoLibraryAddUsageDescription": "Esta app necesita permiso para guardar fotos en tu galería."
+      }
     },
     "android": {
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.ConductorAplicacion"
+      "package": "com.anonymous.ConductorAplicacion",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC7_syBz392mArbu9A5Dgl8FWSHhokzMo8"
+        }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "FOREGROUND_SERVICE" 
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "452e645f-2ef0-4f86-b27f-cabde8cafe21"
+      }
+    }
   }
 }

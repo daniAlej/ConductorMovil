@@ -123,7 +123,7 @@ const UsuarioHome = ({ session, onLogout }) => {
 
   // Effect to fetch driver and route when usage is confirmed
   useEffect(() => {
-    if (!usoRegistrado || !usuario?.id_ruta) return;
+    if (!usoRegistrado || !usuario?.id_ruta || usoConfirmado) return;
 
     let isMounted = true;
     let intervalId;
@@ -183,7 +183,7 @@ const UsuarioHome = ({ session, onLogout }) => {
       isMounted = false;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [usoRegistrado, usuario, route]); // Agregamos route a dependencias para no pedirlo siempre
+  }, [usoRegistrado, usuario, route, usoConfirmado]); // Agregamos route a dependencias para no pedirlo siempre
 
 
   const onRefresh = useCallback(async () => {

@@ -10,6 +10,7 @@ import {
     verificarProximidad
 } from '../api/client';
 import api from '../api/client';
+import PUNTO_FINAL_CONFIG from '../config/puntoFinal';
 
 const JornadaEnCurso = ({ session, onJornadaFinalizada }) => {
     const [jornada, setJornada] = useState(null);
@@ -39,8 +40,9 @@ const JornadaEnCurso = ({ session, onJornadaFinalizada }) => {
     useEffect(() => {
         if (ubicacionActual && jornada) {
             proximityCheckInterval.current = setInterval(() => {
-                checkProximity();
-            }, 10000);
+                checkProximity(); // Verificar paradas cercanas
+                checkProximidadPuntoFinal(); // Verificar punto final
+            }, PUNTO_FINAL_CONFIG.intervaloVerificacion);
         }
 
         return () => {
@@ -83,6 +85,7 @@ const JornadaEnCurso = ({ session, onJornadaFinalizada }) => {
                 return;
             }
 
+            console.log('📍 Iniciando tracking de ubicación del conductor...');
             locationSubscription.current = await Location.watchPositionAsync(
                 {
                     accuracy: Location.Accuracy.High,
@@ -110,8 +113,58 @@ const JornadaEnCurso = ({ session, onJornadaFinalizada }) => {
     };
 
     const stopLocationTracking = () => {
+        console.log('🛑 Deteniendo tracking de ubicación del conductor...');
+
         if (locationSubscription.current) {
             locationSubscription.current.remove();
+            locationSubscription.current = null;
+            console.log('✅ Location subscription removida');
+        }
+
+        if (proximityCheckInterval.current) {
+            clearInterval(proximityCheckInterval.current);
+            proximityCheckInterval.current = null;
+            console.log('✅ Proximity interval detenido');
+        }
+    };
+
+    // Función para calcular distancia entre dos coordenadas (Haversine)
+    const calcularDistancia = (lat1, lon1, lat2, lon2) => {
+        const R = 6371e3; // Radio de la Tierra en metros
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return R * c; // Distancia en metros
+    };
+
+    // Verificar proximidad al punto final
+    const checkProximidadPuntoFinal = () => {
+        if (!ubicacionActual) return;
+
+        const distancia = calcularDistancia(
+            ubicacionActual.latitude,
+            ubicacionActual.longitude,
+            PUNTO_FINAL_CONFIG.latitud,
+            PUNTO_FINAL_CONFIG.longitud
+        );
+
+        console.log(`📏 Distancia al punto final (${PUNTO_FINAL_CONFIG.nombre}): ${distancia.toFixed(2)}m`);
+
+        // Si está dentro del radio de proximidad (20 metros)
+        if (distancia <= PUNTO_FINAL_CONFIG.distanciaProximidad) {
+            console.log(`🎯 ¡Llegaste al punto final! (${distancia.toFixed(2)}m)`);
+            console.log('🏁 Iniciando finalización automática de jornada...');
+
+            // Finalizar automáticamente
+            handleFinalizarJornadaAutomatica();
         }
     };
 
@@ -165,15 +218,22 @@ const JornadaEnCurso = ({ session, onJornadaFinalizada }) => {
             // Recargar paradas pendientes
             await loadParadasPendientes(jornada.id_jornada);
 
-            // Si es la última parada, preguntar si desea finalizar
+            // Si es la última parada, finalizar automáticamente la jornada
             if (data.esUltimaParada) {
+                console.log('🏁 Última parada confirmada - Finalizando jornada automáticamente...');
+
                 Alert.alert(
-                    '🎉 Última Parada',
-                    'Has completado todas las paradas. ¿Deseas finalizar la jornada?',
+                    '🎉 Última Parada Completada',
+                    'Has completado todas las paradas. La jornada se finalizará y se detendrá el seguimiento de ubicación.',
                     [
-                        { text: 'Ahora no', style: 'cancel' },
-                        { text: 'Finalizar Jornada', onPress: handleFinalizarJornada }
-                    ]
+                        {
+                            text: 'Entendido',
+                            onPress: async () => {
+                                await handleFinalizarJornada();
+                            }
+                        }
+                    ],
+                    { cancelable: false } // No permitir cerrar sin finalizar
                 );
             }
 
@@ -185,11 +245,14 @@ const JornadaEnCurso = ({ session, onJornadaFinalizada }) => {
         }
     };
 
-    const handleFinalizarJornada = async () => {
+    // Finalizar jornada automáticamente (sin confirmación) al llegar al punto final
+    const handleFinalizarJornadaAutomatica = async () => {
         if (!ubicacionActual) {
-            Alert.alert('Error', 'No se pudo obtener tu ubicación actual.');
+            console.error('❌ No hay ubicación actual para finalizar jornada');
             return;
         }
+
+        console.log('🏁 Finalizando jornada AUTOMÁTICAMENTE (punto final alcanzado)...');
 
         try {
             await finalizarJornada({
@@ -197,13 +260,53 @@ const JornadaEnCurso = ({ session, onJornadaFinalizada }) => {
                 longitud: ubicacionActual.longitude,
             });
 
-            Alert.alert('✅ Jornada Finalizada', 'La jornada se ha finalizado correctamente.');
+            console.log('✅ Jornada finalizada automáticamente en el backend');
+
+            // Detener todos los tracking INMEDIATAMENTE
             stopLocationTracking();
-            onJornadaFinalizada();
+
+            Alert.alert(
+                '🎯 Llegaste al Destino Final',
+                `Has llegado al punto final (${PUNTO_FINAL_CONFIG.nombre}).\n\nLa jornada se ha finalizado automáticamente y el seguimiento de ubicación ha sido detenido.`,
+                [{ text: 'OK', onPress: () => onJornadaFinalizada() }]
+            );
+
+        } catch (error) {
+            const mensaje = error.response?.data?.error || 'No se pudo finalizar la jornada automáticamente.';
+            console.error('❌ Error al finalizar jornada automáticamente:', error);
+            Alert.alert('Error', mensaje);
+        }
+    };
+
+    const handleFinalizarJornada = async () => {
+        if (!ubicacionActual) {
+            Alert.alert('Error', 'No se pudo obtener tu ubicación actual.');
+            return;
+        }
+
+        console.log('🏁 Finalizando jornada...');
+
+        try {
+            await finalizarJornada({
+                latitud: ubicacionActual.latitude,
+                longitud: ubicacionActual.longitude,
+            });
+
+            console.log('✅ Jornada finalizada en el backend');
+
+            // Detener todos los tracking
+            stopLocationTracking();
+
+            Alert.alert(
+                '✅ Jornada Finalizada',
+                'La jornada se ha finalizado correctamente. El seguimiento de ubicación ha sido detenido.',
+                [{ text: 'OK', onPress: () => onJornadaFinalizada() }]
+            );
 
         } catch (error) {
             const mensaje = error.response?.data?.error || 'No se pudo finalizar la jornada.';
             Alert.alert('Error', mensaje);
+            console.error('Error al finalizar jornada:', error);
         }
     };
 

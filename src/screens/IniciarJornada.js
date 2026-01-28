@@ -4,7 +4,7 @@ import { View, Text, Button, StyleSheet, Alert, FlatList, ActivityIndicator } fr
 import { iniciarJornada, getUsoIntencion, getJornadaActiva } from '../api/client';
 import API from '../api/client';
 import { startLocationTracking, requestPermissions } from '../utils/locationHelper';
-
+import PUNTO_FINAL_CONFIG from '../config/puntoFinal';
 const IniciarJornada = forwardRef(({ session, onJornadaIniciada, onCrearReporte }, ref) => {
   const [loading, setLoading] = useState(false);
   const [verificandoJornada, setVerificandoJornada] = useState(true); // Para mostrar loading inicial
@@ -14,20 +14,29 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada, onCrearReporte 
   const [ultimaUbicacion, setUltimaUbicacion] = useState(null); // Para mostrar en UI
   const locationSubscription = useRef(null);
   const intervaloPasajeros = useRef(null);
+  const proximityCheckInterval = useRef(null); // Para verificar punto final
+  const detenerUbicacionRef = useRef(false);
+  const ultimaUbicacionRef = useRef(null);
 
   useImperativeHandle(ref, () => ({
     stopLocationTracking: () => {
-      if (locationSubscription.current) {
-        locationSubscription.current.remove();
-        console.log('🛑 Tracking de ubicación detenido');
-      }
-      if (intervaloPasajeros.current) {
-        clearInterval(intervaloPasajeros.current);
-        console.log('🛑 Intervalo de actualización detenido');
-      }
+      detenerTrackingCompleto(); // Usamos una función centralizada
     },
   }));
+  // Función centralizada para detener todo limpiamente
+  const detenerTrackingCompleto = () => {
+    detenerUbicacionRef.current = true; // Activar bandera
 
+    if (locationSubscription.current) {
+      locationSubscription.current.remove();
+      locationSubscription.current = null;
+      console.log('🛑 Tracking de ubicación detenido por cercanía o comando manual');
+    }
+    if (intervaloPasajeros.current) {
+      clearInterval(intervaloPasajeros.current);
+      console.log('🛑 Intervalo de actualización de pasajeros detenido');
+    }
+  };
   // Cargar pasajeros después de iniciar jornada
   const cargarPasajeros = async () => {
     try {
@@ -122,6 +131,41 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada, onCrearReporte 
       console.error('❌ Error al cargar pasajeros:', error);
     }
   };
+  // Función para calcular distancia entre dos coordenadas (Haversine)
+  const calcularDistancia = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // Radio de la Tierra en metros
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distancia en metros
+  };
+
+  // Función para verificar si se llegó al punto final
+  const verificarPuntoFinal = async () => {
+    if (!ultimaUbicacionRef.current) return;
+    const distancia = calcularDistancia(
+      ultimaUbicacionRef.current.latitud,
+      ultimaUbicacionRef.current.longitud,
+      PUNTO_FINAL_CONFIG.latitud,
+      PUNTO_FINAL_CONFIG.longitud
+    );
+    console.log('📏 [PUNTO FINAL] Distancia al punto final:', distancia.toFixed(2), 'metros');
+    if (distancia <= PUNTO_FINAL_CONFIG.radio) {
+      //detenet tracking
+      detenerUbicacion = true;
+      console.log('🎯 [PUNTO FINAL] Se llegó al punto final');
+      // Aquí puedes agregar la lógica para finalizar la jornada
+    }
+  };
+
 
   // Verificar si ya existe una jornada activa para este conductor hoy
   const verificarJornadaActiva = async () => {
@@ -184,6 +228,8 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada, onCrearReporte 
 
         // Iniciar tracking de ubicación
         await iniciarTracking();
+        await verificarPuntoFinal();
+
 
         console.log('✅ Estado restaurado de jornada activa');
       } else {
@@ -230,7 +276,7 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada, onCrearReporte 
         locationSubscription.current.remove();
         locationSubscription.current = null;
       }
-
+      detenerUbicacionRef.current = false;
       // Solicitar permisos (no solo verificar)
       console.log('📍 Solicitando permisos de ubicación...');
       const { status } = await requestPermissions();
@@ -249,14 +295,40 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada, onCrearReporte 
       console.log('⚙️ Configuración GPS: timeInterval=3000ms (3s), distanceInterval=0m, accuracy=Balanced');
       locationSubscription.current = await startLocationTracking(
         async (location) => {
+          // Si ya se ordenó detener, no hacemos nada (por seguridad si el evento llega tarde)
+          if (detenerUbicacionRef.current) return;
           const { latitude, longitude } = location.coords;
-
+          // 1. Calcular distancia en tiempo real
+          const distancia = calcularDistancia(
+            latitude,
+            longitude,
+            PUNTO_FINAL_CONFIG.latitud,
+            PUNTO_FINAL_CONFIG.longitud
+          );
           // Actualizar estado para mostrar en UI
           setUltimaUbicacion({
             latitud: latitude,
             longitud: longitude,
             timestamp: new Date().toLocaleTimeString()
           });
+          // 3. VERIFICACIÓN DE LOS 10 METROS
+          // Usamos 10 metros fijos como pediste, o puedes usar PUNTO_FINAL_CONFIG.radio
+          const RADIO_LIMITE = 10;
+          if (distancia <= RADIO_LIMITE) {
+            console.log('🎯 [PUNTO FINAL ALCANZADO] Deteniendo envíos...');
+
+            // Detener lógica
+            detenerTrackingCompleto();
+
+            Alert.alert(
+              'Llegada a destino',
+              'Has llegado al punto final. Se ha detenido el compartimiento de ubicación.'
+            );
+
+            // Aquí puedes llamar a una función para cerrar la jornada automáticamente si deseas
+            // finalizarJornada(); 
+            return; // Salimos para no enviar esta ubicación al backend
+          }
 
           try {
             const response = await API.post('/conductores/location', {
@@ -269,6 +341,7 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada, onCrearReporte 
           } catch (error) {
             console.error('❌ Error ubicación:', error.response?.status, error.response?.data?.error || error.message);
           }
+
         }
       );
       console.log('✅ Tracking de ubicación iniciado');
@@ -284,6 +357,7 @@ const IniciarJornada = forwardRef(({ session, onJornadaIniciada, onCrearReporte 
     // Cleanup al desmontar
     return () => {
       console.log('🧹 Cleanup: Desmontando componente...');
+      detenerTrackingCompleto();
       if (intervaloPasajeros.current) {
         clearInterval(intervaloPasajeros.current);
         console.log('🧹 Intervalo de pasajeros limpiado');

@@ -19,6 +19,10 @@ API.interceptors.request.use(
       } else {
         console.log('⚠️ No hay token disponible para:', config.url);
       }
+
+      // IMPORTANTE: Agregar header para evitar la página de advertencia de ngrok
+      config.headers['ngrok-skip-browser-warning'] = 'true';
+
     } catch (error) {
       console.error('❌ Error al obtener token:', error);
     }

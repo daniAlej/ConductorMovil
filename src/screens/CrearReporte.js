@@ -35,15 +35,32 @@ const CrearReporte = ({ session, onClose, rutaId }) => {
 
   const takePicture = async () => {
     if (hasPermission) {
-      // Capturar foto
+      // Capturar foto con COMPRESIÓN para evitar archivos muy grandes
       let result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 1,
+        allowsEditing: true, // Permitir recorte
+        aspect: [4, 3],
+        quality: 0.3, // REDUCIDO: 30% de calidad (era 100%) - reduce mucho el tamaño
+        base64: false,
+        exif: false, // No incluir metadatos EXIF para reducir tamaño
       });
 
       if (!result.canceled) {
-        setFoto(result.assets[0]);
+        const asset = result.assets[0];
+        setFoto(asset);
+
+        // Log del tamaño del archivo para debugging
+        if (asset.fileSize) {
+          const sizeInMB = (asset.fileSize / (1024 * 1024)).toFixed(2);
+          console.log(`📸 Foto capturada - Tamaño: ${sizeInMB} MB`);
+
+          if (asset.fileSize > 5 * 1024 * 1024) { // Si es mayor a 5MB
+            Alert.alert(
+              'Foto muy grande',
+              `La foto es de ${sizeInMB} MB. Puede que tarde en subirse.`
+            );
+          }
+        }
 
         // Capturar ubicación actual
         try {
@@ -56,9 +73,9 @@ const CrearReporte = ({ session, onClose, rutaId }) => {
             longitude: location.coords.longitude,
           });
 
-          console.log('Ubicación capturada:', location.coords.latitude, location.coords.longitude);
+          console.log('📍 Ubicación capturada:', location.coords.latitude, location.coords.longitude);
         } catch (error) {
-          console.error('Error al obtener ubicación:', error);
+          console.error('❌ Error al obtener ubicación:', error);
           Alert.alert('Ubicación', 'No se pudo obtener la ubicación actual.');
         }
       }
@@ -125,15 +142,18 @@ const CrearReporte = ({ session, onClose, rutaId }) => {
     <View style={styles.container}>
       <Text style={styles.title}>Crear Reporte</Text>
 
-      <Picker
-        selectedValue={tipo}
-        onValueChange={(itemValue) => setTipo(itemValue)}
-        style={styles.picker}
-      >
-        <Picker.Item label="Atraso" value="atraso" />
-        <Picker.Item label="Desvío" value="desvio" />
-        <Picker.Item label="Cumplimiento" value="cumplimiento" />
-      </Picker>
+      <View style={styles.pickerContainer}>
+        <Text style={styles.label}>Tipo de Reporte:</Text>
+        <Picker
+          selectedValue={tipo}
+          onValueChange={(itemValue) => setTipo(itemValue)}
+          style={styles.picker}
+        >
+          <Picker.Item label="Atraso" value="atraso" />
+          <Picker.Item label="Desvío" value="desvio" />
+          <Picker.Item label="Cumplimiento" value="cumplimiento" />
+        </Picker>
+      </View>
 
       <TextInput
         style={styles.input}
@@ -181,12 +201,38 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     minHeight: 100,
     textAlignVertical: 'top',
+    color: '#000',
   },
-  picker: {
+  pickerContainer: {
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 5,
+    backgroundColor: '#fff',
+    ...Platform.select({
+      android: {
+        // En Android necesita un contenedor con altura definida
+        height: 50,
+        justifyContent: 'center',
+      },
+    }),
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 5,
+    color: '#333',
+  },
+  picker: {
+    ...Platform.select({
+      android: {
+        color: '#000',
+        height: 50,
+      },
+      ios: {
+        marginBottom: 20,
+      },
+    }),
   },
   buttonContainer: {
     marginTop: 20,

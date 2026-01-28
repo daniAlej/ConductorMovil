@@ -1,24 +1,15 @@
 // src/hooks/useProximityTracking.js
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { verificarProximidadUsuario } from '../api/client';
-import { useLocation } from './useLocation';
+import * as Location from 'expo-location'; // IMPORTANTE: Usamos la librería directa
 import { Alert } from 'react-native';
 
-/**
- * Hook personalizado para rastrear la proximidad entre el usuario y la unidad (bus)
- * Verifica automáticamente cada 10 segundos y confirma el uso cuando está cerca
- * 
- * @param {number} idUsuario - ID del usuario
- * @param {number} idJornada - ID de la jornada activa
- * @param {boolean} enabled - Si el tracking está habilitado
- * @returns {Object} { distancia, confirmado, mensaje, dentroDelRango, isChecking, verificarProximidad }
- */
 export const useProximityTracking = (idUsuario, idJornada, enabled = true) => {
-    const { location } = useLocation({
-        enableHighAccuracy: true,
-        distanceFilter: 10,
-        timeInterval: 5000
-    });
+    // Estado local para la ubicación (reemplazamos useLocation)
+    const [userLocation, setUserLocation] = useState(null);
+
+    // Referencia para la suscripción del GPS
+    const locationSubscription = useRef(null);
 
     const [proximityData, setProximityData] = useState({
         distancia: null,
@@ -30,115 +21,137 @@ export const useProximityTracking = (idUsuario, idJornada, enabled = true) => {
     const [isChecking, setIsChecking] = useState(false);
     const [lastNotification, setLastNotification] = useState(null);
 
-    // DEBUG: Log hook params and location
-    console.log('🎯 useProximityTracking Estado:', {
-        idUsuario,
-        idJornada,
-        enabled,
-        hasLocation: !!location,
-        location: location ? { lat: location.latitude, lng: location.longitude } : null,
-        proximityData
-    });
+    // 1. EFECTO DE CONTROL DEL GPS (Encender/Apagar)
+    useEffect(() => {
+        // Función para limpiar suscripción
+        const stopLocationUpdates = () => {
+            if (locationSubscription.current) {
+                locationSubscription.current.remove();
+                locationSubscription.current = null;
+                console.log('🛑 [GPS] Suscripción de ubicación detenida.');
+            }
+        };
 
+        const startLocationUpdates = async () => {
+            // Si no está habilitado o ya se confirmó, NO encendemos el GPS
+            if (!enabled || proximityData.confirmado) {
+                stopLocationUpdates();
+                return;
+            }
+
+            try {
+                // Pedir permisos si es necesario
+                const { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                    console.error('❌ Permiso de ubicación denegado');
+                    return;
+                }
+
+                console.log('🚀 [GPS] Iniciando rastreo de ubicación...');
+
+                // Iniciar suscripción
+                locationSubscription.current = await Location.watchPositionAsync(
+                    {
+                        accuracy: Location.Accuracy.High,
+                        timeInterval: 5000,
+                        distanceInterval: 10,
+                    },
+                    (location) => {
+                        // Actualizamos el estado local
+                        setUserLocation(location.coords);
+                    }
+                );
+            } catch (error) {
+                console.error('❌ Error al iniciar GPS:', error);
+            }
+        };
+
+        // Ejecutar lógica de inicio/parada
+        startLocationUpdates();
+
+        // Cleanup al desmontar
+        return () => stopLocationUpdates();
+
+    }, [enabled, proximityData.confirmado]); // SE EJECUTA SI CAMBIA "ENABLED" O "CONFIRMADO"
+
+
+    // 2. LÓGICA DE VERIFICACIÓN CON BACKEND (Se mantiene similar)
     const verificarProximidad = useCallback(async () => {
-        if (!enabled || !location || !idUsuario || !idJornada) {
-            console.log('⏸️ Proximidad no habilitada o faltan datos:', {
-                enabled,
-                hasLocation: !!location,
-                idUsuario,
-                idJornada
-            });
+        // Usamos userLocation del estado local
+        if (!enabled || !userLocation || !idUsuario || !idJornada || proximityData.confirmado) {
             return;
         }
 
         setIsChecking(true);
 
         try {
-            console.log('🔍 Verificando proximidad...', {
-                idUsuario,
-                idJornada,
-                location: { lat: location.latitude, lng: location.longitude }
-            });
-
             const data = await verificarProximidadUsuario(idUsuario, {
-                latitude: location.latitude,
-                longitude: location.longitude,
+                latitude: userLocation.latitude,
+                longitude: userLocation.longitude,
                 id_jornada: idJornada,
             });
 
-            console.log('📊 Respuesta de proximidad:', data);
+            // Si la jornada finalizó
+            if (data.jornadaFinalizada || data.jornadaNoActiva) {
+                setProximityData(prev => ({
+                    ...prev,
+                    confirmado: true, // Esto disparará el useEffect de arriba para apagar el GPS
+                    mensaje: 'La jornada ha finalizado'
+                }));
+                Alert.alert('🏁 Jornada Finalizada', 'El seguimiento se ha detenido.');
+                return;
+            }
 
-            const previousConfirmado = proximityData.confirmado;
-
-            setProximityData({
+            // Actualizar datos
+            setProximityData(prev => ({
+                ...prev,
                 distancia: data.distancia,
                 confirmado: data.confirmado,
                 mensaje: data.mensaje,
                 dentroDelRango: data.dentroDelRango,
-            });
+            }));
 
-            // Si se confirmó por primera vez, mostrar notificación
-            if (data.confirmado && !previousConfirmado) {
-                console.log('✅ ¡Uso confirmado automáticamente!');
-                Alert.alert(
-                    '✅ ¡Uso Confirmado!',
-                    'Tu viaje ha sido confirmado automáticamente porque estás cerca de la unidad.',
-                    [{ text: 'Entendido', style: 'default' }]
-                );
-                setLastNotification('confirmed');
+            // Lógica de notificaciones
+            if (data.confirmado && !proximityData.confirmado) {
+                Alert.alert('✅ ¡Uso Confirmado!', 'Te has subido a la unidad. Dejaremos de compartir tu ubicación.');
+                // ALERTA: Al ponerse confirmado en true, el useEffect del GPS se disparará y APAGARÁ el rastreo.
             }
-            // Si está dentro del rango pero aún no confirmado, notificar
             else if (data.dentroDelRango && !data.confirmado && lastNotification !== 'approaching') {
-                console.log('🔔 La unidad está cerca');
-                Alert.alert(
-                    '🔔 La Unidad Está Cerca',
-                    `La unidad está a ${data.distancia}m de tu ubicación. Tu viaje se confirmará automáticamente cuando estés más cerca.`,
-                    [{ text: 'OK', style: 'default' }]
-                );
+                Alert.alert('🔔 Cerca', `Estás a ${data.distancia}m.`);
                 setLastNotification('approaching');
             }
 
         } catch (error) {
             console.error('❌ Error verificando proximidad:', error);
-            console.error('❌ Error detalles:', error.response?.data || error.message);
-            setProximityData(prev => ({
-                ...prev,
-                mensaje: 'Error al verificar proximidad'
-            }));
         } finally {
             setIsChecking(false);
         }
-    }, [location, idUsuario, idJornada, enabled, proximityData.confirmado, lastNotification]);
+    }, [userLocation, idUsuario, idJornada, enabled, proximityData.confirmado, lastNotification]);
 
-    // Verificar proximidad automáticamente cada 10 segundos
+
+    // 3. INTERVALO DE VERIFICACIÓN
     useEffect(() => {
-        if (!enabled || proximityData.confirmado) {
-            console.log('⏹️ Tracking detenido -', proximityData.confirmado ? 'Ya confirmado' : 'No habilitado');
-            return;
-        }
+        // Si no está habilitado o ya confirmó, no hacemos nada
+        if (!enabled || proximityData.confirmado) return;
 
-        console.log('▶️ Iniciando tracking de proximidad automático');
+        // Verificación inmediata si hay ubicación
+        if (userLocation) verificarProximidad();
 
-        // Verificación inicial
-        verificarProximidad();
-
-        // Verificación periódica cada 10 segundos
         const interval = setInterval(() => {
-            console.log('🔄 Intervalo: Verificando proximidad...');
-            verificarProximidad();
+            if (userLocation) {
+                console.log('🔄 Intervalo: Verificando API...');
+                verificarProximidad();
+            }
         }, 10000);
 
-        return () => {
-            console.log('🧹 Limpiando intervalo de proximidad');
-            clearInterval(interval);
-        };
-    }, [enabled, proximityData.confirmado, verificarProximidad]);
+        return () => clearInterval(interval);
+    }, [enabled, proximityData.confirmado, userLocation, verificarProximidad]);
 
     return {
         ...proximityData,
         isChecking,
         verificarProximidad,
-        userLocation: location,
+        userLocation: userLocation ? { latitude: userLocation.latitude, longitude: userLocation.longitude } : null,
     };
 };
 

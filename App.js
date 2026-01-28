@@ -9,6 +9,7 @@ import ConductorHome from './src/screens/ConductorHome';
 import UsuarioHome from './src/screens/UsuarioHome';
 import IniciarJornada from './src/screens/IniciarJornada';
 import CrearReporte from './src/screens/CrearReporte';
+import TestConnection from './src/screens/TestConnection';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -17,6 +18,7 @@ export default function App() {
   const [creandoReporte, setCreandoReporte] = useState(false);
   const [rutaIdParaReporte, setRutaIdParaReporte] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showTestConnection, setShowTestConnection] = useState(false);
   const iniciarJornadaRef = useRef(null);
 
   useEffect(() => {
@@ -86,8 +88,22 @@ export default function App() {
       hasSession: !!session,
       role,
       creandoReporte,
-      jornadaIniciada
+      jornadaIniciada,
+      showTestConnection
     });
+
+    // Pantalla de diagnóstico (tiene prioridad sobre todo si está activa)
+    if (showTestConnection) {
+      console.log('   → Renderizando: TestConnection');
+      return (
+        <View style={{ flex: 1 }}>
+          <View style={{ position: 'absolute', top: 10, left: 10, zIndex: 999 }}>
+            <Button title="← Volver" onPress={() => setShowTestConnection(false)} />
+          </View>
+          <TestConnection />
+        </View>
+      );
+    }
 
     if (session) {
       if (role === 'conductor') {
@@ -110,11 +126,11 @@ export default function App() {
     }
 
     if (role === 'conductor') {
-      return <ConductorLogin onAuth={handleAuth} />;
+      return <ConductorLogin onAuth={handleAuth} onShowTest={() => setShowTestConnection(true)} />;
     }
 
     if (role === 'usuario') {
-      return <UsuarioLogin onAuth={handleAuth} />;
+      return <UsuarioLogin onAuth={handleAuth} onShowTest={() => setShowTestConnection(true)} />;
     }
 
     // Fallback por si el estado es inconsistente
